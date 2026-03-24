@@ -6,6 +6,11 @@ exports.createCard = async (req, res) => {
   try {
     const { name, cardNumber, cvv, expiry } = req.body;
     const card = await Card.create({ name, cardNumber, cvv, expiry });
+    
+    // EMIT SOCKET EVENT
+    const io = req.app.get('socketio');
+    io.emit('card-added', card);
+
     res.status(201).json(card);
   } catch (err) {
     res.status(500).json({ message: err.message });

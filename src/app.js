@@ -12,7 +12,25 @@ const checkoutRoutes = require('./routes/checkout.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const cardRoutes = require('./routes/card.routes');
 
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+  },
+});
+
+app.set('socketio', io);
+
+io.on('connection', (socket) => {
+  console.log('A user connected: ', socket.id);
+  socket.on('disconnect', () => {
+    console.log('User disconnected: ', socket.id);
+  });
+});
 
 app.use(cors({
   origin: '*',
@@ -38,7 +56,7 @@ if (process.env.NODE_ENV === 'development') {
 
 sequelize.sync().then(() => {
   console.log('DB connected');
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 });
