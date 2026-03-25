@@ -11,6 +11,7 @@ const cartRoutes = require('./routes/cart.routes');
 const checkoutRoutes = require('./routes/checkout.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const cardRoutes = require('./routes/card.routes');
+const userRoutes = require('./routes/user.routes');
 
 const http = require('http');
 const { Server } = require('socket.io');
@@ -38,7 +39,7 @@ app.use(cors({
 app.use(express.json({limit: '100mb'}));
 
 app.use('/api/account', authRoutes);
-app.use('/api/users', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/cart', cartRoutes);

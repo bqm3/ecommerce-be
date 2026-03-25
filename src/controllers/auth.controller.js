@@ -5,22 +5,49 @@ const { generateToken } = require('../utils/jwt');
 // REGISTER
 exports.register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName } = req.body;
+    const { 
+      email, password, firstName, lastName, name, 
+      phoneNumber, address, avatarUrl, role 
+    } = req.body;
+
+    // Check existing email
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // Support "name" as alias: split into firstName/lastName if provided
+    let fName = firstName;
+    let lName = lastName;
+    if (!fName && name) {
+      const parts = name.trim().split(' ');
+      lName = parts.pop();
+      fName = parts.join(' ') || lName;
+    }
 
     const hash = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       email,
       password: hash,
-      firstName,
-      lastName,
+      firstName: fName,
+      lastName: lName,
+      phoneNumber: phoneNumber || '',
+      address: address || '',
+      avatarUrl: avatarUrl || '',
+      role: role || 'user',
     });
 
     const accessToken = generateToken(user);
 
+    const { password: _, ...userData } = user.toJSON();
+
     res.json({
       accessToken,
-      user,
+      user: {
+        ...userData,
+        name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email,
+      },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
