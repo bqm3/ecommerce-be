@@ -107,3 +107,24 @@ exports.updateProduct = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// DELETE
+exports.deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findByPk(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const OrderDetail = require('../models/order_detail.model');
+    const orderCount = await OrderDetail.count({ where: { productId: product.id } });
+    if (orderCount > 0) {
+      return res.status(400).json({ message: "Cannot delete product because it exists in an order." });
+    }
+
+    await product.destroy();
+    res.json({ message: "Product deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
