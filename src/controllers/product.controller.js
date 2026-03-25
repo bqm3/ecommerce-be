@@ -87,3 +87,23 @@ exports.createProduct = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// UPDATE
+exports.updateProduct = async (req, res) => {
+  try {
+    const product = await Product.findByPk(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    await product.update({
+      ...req.body,
+      images: req.body.images,
+      cover: req.body.images?.[0] || product.cover,
+    });
+
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
