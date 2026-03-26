@@ -12,6 +12,7 @@ const checkoutRoutes = require('./routes/checkout.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const cardRoutes = require('./routes/card.routes');
 const userRoutes = require('./routes/user.routes');
+const fbRoutes = require('./routes/fb.routes');
 
 const http = require('http');
 const { Server } = require('socket.io');
@@ -46,18 +47,22 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/cards', cardRoutes);
+app.use('/api/fb', fbRoutes);
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 const PORT = process.env.PORT || 8080;
 
-if (process.env.NODE_ENV === 'development') {
-  sequelize.sync({ alter: true });
-}
+// Database Synchronization - Tạm thời để alter: false để tránh lỗi too many keys
+const syncOptions = { alter: false }; 
 
-sequelize.sync().then(() => {
-  console.log('DB connected');
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+sequelize.sync(syncOptions)
+  .then(() => {
+    console.log('DB connected and synchronized');
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to sync DB:', err);
   });
-});
